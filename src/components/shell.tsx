@@ -53,6 +53,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     root.classList.toggle("dc-anim", anim);
     root.classList.toggle("dc-pencil-on", pencil);
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#161513" : "#efe9df");
+    // Paint the page behind the planner too, so overscroll and tall windows match the theme.
+    document.documentElement.style.backgroundColor = dark ? "#161513" : "#efe9df";
+    document.body.style.backgroundColor = dark ? "#161513" : "#efe9df";
   }, [prefs.theme, prefs.density, anim, pencil, dark]);
 
   // Keyboard: N = quick capture, T = today, ←/→ = days (when not typing).
@@ -227,16 +230,16 @@ export function SyncBadge() {
   }
   return (
     <button
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs"
+      className="flex w-full min-w-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs"
       style={{ color }}
       title={s.error ?? (s.lastSyncAt ? `Last synced ${new Date(s.lastSyncAt).toLocaleString()}` : undefined)}
       onClick={() => void sync.syncNow()}
       role="status"
       aria-live="polite"
     >
-      <span className="flex items-start gap-2">
+      <span className="flex min-w-0 items-start gap-2">
         <span className="mt-px shrink-0">{icon}</span>
-        <span>
+        <span className="min-w-0 [overflow-wrap:anywhere]">
           {text}
           {s.error && s.mode !== "local-only" && s.online && (
             <span className="mt-1 block text-[0.7rem] leading-snug opacity-90">
