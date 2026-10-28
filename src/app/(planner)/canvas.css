@@ -332,4 +332,24 @@ body:has(.dc-root) .grain {
 .dc-quote-text { flex: 0 1 auto; max-width: 40rem; text-align: center; text-wrap: balance; color: inherit; }
 button.dc-quote-text { cursor: pointer; border-radius: 0.5rem; padding: 0.25rem 0.5rem; }
 button.dc-quote-text:hover { background: color-mix(in srgb, var(--dc-paper-2) 70%, transparent); }
+
+/* One-page print: a letter-size sheet, always in the light paper colours. */
+.dc-print-paper {
+  --dc-paper: #fff; --dc-paper-2: #f8f6f1; --dc-rule: rgba(60, 50, 30, 0.1); --dc-line: rgba(60, 50, 30, 0.16);
+  --dc-ink: #2b2a27; --dc-muted: #6e6a62; --dc-faint: #9b968c; --dc-shadow: none;
+  color-scheme: light; color: var(--dc-ink); background: #fff;
+  width: 8.5in; height: 11in; padding: 0.4in; margin: 0 auto; overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 18px 40px -18px rgba(0, 0, 0, 0.35);
+}
+.dc-print-fit { margin: 0 auto; overflow: hidden; }
+.dc-print-sheet { transform-origin: top left; }
+.dc-print-sheet .dc-noprint { display: none !important; }
+.dc-print-sheet .dc-card { box-shadow: none; break-inside: avoid; }
+.dc-print-sheet .dc-quote { margin-top: 0.35rem; }
+.dc-print-sheet textarea { resize: none; }
+@media print {
+  @page { size: letter portrait; margin: 0.4in; }
+  html, body { background: #fff !important; }
+  .dc-print-paper { width: auto; height: auto; padding: 0; box-shadow: none; overflow: visible; }
+}
 }
