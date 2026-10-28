@@ -518,3 +518,6 @@ begin
     end;
   end loop;
 end $$;
+
+-- Make the API see the new tables and functions straight away.
+notify pgrst, 'reload schema';

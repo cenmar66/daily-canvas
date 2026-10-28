@@ -13,6 +13,7 @@ import { ENGINE_KEY } from "./dictation";
 import { googleApi, refreshGoogleStatus, useGoogleStatus } from "./google-client";
 import { useCanvas, useSyncStatus } from "./provider";
 import { SyncBadge } from "./shell";
+import { customLine } from "@/lib/canvas/quotes";
 
 function Card({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
@@ -152,8 +153,14 @@ function Appearance() {
         </button>
         <Toggle on={prefs.sound} onChange={(v) => set({ sound: v })} label="Sound" />
       </Row>
-      <Row label="Daily line" hint="The handwritten note beside the date.">
-        <input className="dc-field w-72" value={prefs.tagline} onChange={(e) => set({ tagline: e.target.value })} />
+      <Row label="Quote under the date" hint="Leave empty for a new quote each day, or write your own line to show every day.">
+        <input
+          className="dc-field w-72"
+          placeholder="A new quote each day"
+          aria-label="Your own line"
+          value={customLine(prefs.tagline) ?? ""}
+          onChange={(e) => set({ tagline: e.target.value })}
+        />
       </Row>
     </Card>
   );

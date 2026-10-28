@@ -15,6 +15,7 @@ import { useLocalFlag, useSectionColor } from "./section-card";
 import { AppointmentsCard, ExerciseCard, IdeasCard, JournalCard, MealsCard, NotesCard, TaskSectionCard, WaterCard } from "./sections";
 import { MonthView, WeekView } from "./calendar-views";
 import { WrapUp } from "./wrap-up";
+import { DailyQuote } from "./daily-quote";
 import { useMedia } from "./use-dark";
 import { useState } from "react";
 
@@ -52,7 +53,7 @@ export function useDayProgress(date: ISODate) {
 }
 
 export function PlannerHeader() {
-  const { date, setDate, today, view, setView, pencil, setPencil, setCaptureOpen, prefs } = useCanvas();
+  const { date, setDate, today, view, setView, pencil, setPencil, setCaptureOpen } = useCanvas();
   const pickerRef = useRef<HTMLInputElement>(null);
   const [wrap, setWrap] = useState(false);
   const step = view === "day" ? 1 : view === "week" ? 7 : 0;
@@ -122,7 +123,6 @@ export function PlannerHeader() {
         </div>
       </div>
       {wrap && <WrapUp date={date} onClose={() => setWrap(false)} />}
-      <span className="hidden">{prefs.tagline}</span>
     </div>
   );
 }
@@ -146,15 +146,15 @@ function DayView() {
   const [phoneCards, setPhoneCards] = useLocalFlag("dc-phone-cards");
 
   const title = (
-    <div className="flex flex-wrap items-end gap-x-5 gap-y-1">
-      <h1 className="dc-serif text-[1.65rem] leading-tight md:text-[2rem]">{formatLong(date)}</h1>
-      <p className="dc-hand pb-1 text-xl md:text-2xl" style={{ color: "var(--dc-muted)", transform: "rotate(-2deg)" }}>
-        {prefs.tagline}
-      </p>
-      <div className="ml-auto flex items-center gap-2 pb-1 text-sm" style={{ color: "var(--dc-muted)" }}>
-        <Ring value={progress.completionRate} size={34} stroke={3.5} label={`${progress.completedPlanned} of ${progress.planned} tasks done`} />
-        <span>{progress.planned ? `${progress.completedPlanned} of ${progress.planned} done` : "Nothing planned yet"}</span>
+    <div>
+      <div className="flex flex-wrap items-end gap-x-5 gap-y-1">
+        <h1 className="dc-serif text-[1.65rem] leading-tight md:text-[2rem]">{formatLong(date)}</h1>
+        <div className="ml-auto flex items-center gap-2 pb-1 text-sm" style={{ color: "var(--dc-muted)" }}>
+          <Ring value={progress.completionRate} size={34} stroke={3.5} label={`${progress.completedPlanned} of ${progress.planned} tasks done`} />
+          <span>{progress.planned ? `${progress.completedPlanned} of ${progress.planned} done` : "Nothing planned yet"}</span>
+        </div>
       </div>
+      <DailyQuote date={date} />
     </div>
   );
 
@@ -184,9 +184,9 @@ function DayView() {
     return (
       <div className="px-3 py-3">
         <h1 className="dc-serif text-center text-xl">{formatLong(date).replace(/^\w+, /, "")}</h1>
-        <p className="dc-hand mb-3 text-center text-lg" style={{ color: "var(--dc-muted)" }}>
-          {prefs.tagline}
-        </p>
+        <div className="mb-3">
+          <DailyQuote date={date} compact />
+        </div>
         {banner}
         <ul className="space-y-2" aria-label="Sections">
           {order.map((k) => (

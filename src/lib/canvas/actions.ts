@@ -33,7 +33,7 @@ export const DEFAULT_PREFS: Omit<Preferences, "id" | "created_at" | "updated_at"
   dictation_lang: "en-US",
   ai_interpreter: false,
   reminders: {},
-  tagline: "A focused day builds a brighter life.",
+  tagline: "",
 };
 
 export class Planner {

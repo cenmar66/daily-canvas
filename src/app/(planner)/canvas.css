@@ -98,7 +98,7 @@ body:has(.dc-root) .grain {
   border-radius: 9px 9px 0 0;
 }
 .dc-collapsed .dc-card-head { border-radius: 9px; }
-.dc-card-head button { color: inherit; }
+.dc-card-head button { color: inherit; text-transform: inherit; letter-spacing: inherit; }
 .dc-count { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: 0.02em; opacity: 0.95; }
 
 /* Ruled rows like the paper pad */
@@ -326,4 +326,10 @@ body:has(.dc-root) .grain {
   .dc-check { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
+/* Quote of the day: centred, with a hairline either side. */
+.dc-quote { display: flex; align-items: center; gap: 1.25rem; margin: 0.6rem auto 0; max-width: 54rem; }
+.dc-quote-rule { flex: 1 1 2rem; min-width: 1.5rem; height: 1px; background: var(--dc-line); }
+.dc-quote-text { flex: 0 1 auto; max-width: 40rem; text-align: center; text-wrap: balance; color: inherit; }
+button.dc-quote-text { cursor: pointer; border-radius: 0.5rem; padding: 0.25rem 0.5rem; }
+button.dc-quote-text:hover { background: color-mix(in srgb, var(--dc-paper-2) 70%, transparent); }
 }

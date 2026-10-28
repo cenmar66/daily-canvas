@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { formatLong, isISODate } from "@/lib/canvas/dates";
 import { resolveOrder } from "@/lib/canvas/sections";
 import { renderSection, useDayProgress } from "./day-view";
+import { DailyQuote } from "./daily-quote";
 import { useCanvas } from "./provider";
 
 /** A clean page for printing, or "Save as PDF" from the print dialog. */
@@ -28,13 +29,13 @@ export function PrintView() {
       </div>
       <header className="mb-4 flex items-end gap-4">
         <h1 className="dc-serif text-3xl">{formatLong(date)}</h1>
-        <p className="dc-hand text-xl" style={{ color: "var(--dc-muted)" }}>
-          {prefs.tagline}
-        </p>
         <p className="ml-auto text-sm" style={{ color: "var(--dc-muted)" }}>
           {p.completedPlanned}/{p.planned} done · {prefs.timezone}
         </p>
       </header>
+      <div className="mb-4">
+        <DailyQuote date={date} compact />
+      </div>
       <div className="columns-2 gap-4 [&>*]:mb-4">{order.map((k) => renderSection(k, date))}</div>
     </div>
   );

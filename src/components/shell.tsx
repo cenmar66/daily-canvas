@@ -195,6 +195,15 @@ function BottomTabs() {
   );
 }
 
+/** Plain-language reason for a sync error, with what to do about it. */
+export function explainSyncError(msg: string): string {
+  if (/schema cache|does not exist|Could not find the (table|function)|PGRST20[25]|42P01|42883/i.test(msg))
+    return "The planner's tables aren't in your database yet. In Supabase → SQL Editor, run supabase/migrations/0001_daily_canvas.sql, then click here to retry.";
+  if (/JWT|not authenticated|401|403|permission denied|row-level security/i.test(msg))
+    return "Your sign-in isn't being accepted by the database. Sign out and back in, and check the Supabase URL and key in Vercel match.";
+  return msg;
+}
+
 export function SyncBadge() {
   const s = useSyncStatus();
   const { sync } = useCanvas();
@@ -225,8 +234,18 @@ export function SyncBadge() {
       role="status"
       aria-live="polite"
     >
-      {icon}
-      {text}
+      <span className="flex items-start gap-2">
+        <span className="mt-px shrink-0">{icon}</span>
+        <span>
+          {text}
+          {s.error && s.mode !== "local-only" && s.online && (
+            <span className="mt-1 block text-[0.7rem] leading-snug opacity-90">
+              {explainSyncError(s.error)}
+              {explainSyncError(s.error) !== s.error && <span className="mt-1 block opacity-70">Details: {s.error}</span>}
+            </span>
+          )}
+        </span>
+      </span>
     </button>
   );
 }
