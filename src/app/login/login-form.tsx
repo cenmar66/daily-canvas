@@ -2,7 +2,7 @@
 
 import { ArrowRight, Loader2, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { explainAuthError } from "@/lib/auth-errors";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,6 +13,11 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
+
+  // Show a sign-in error once: drop it from the address so a reload starts fresh.
+  useEffect(() => {
+    if (window.location.search) window.history.replaceState(null, "", "/login");
+  }, []);
 
   // A missing or malformed Supabase URL would otherwise crash the page.
   let supabase: ReturnType<typeof createClient>;

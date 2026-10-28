@@ -9,7 +9,8 @@ type SearchParams = Promise<{ error?: string; detail?: string; check?: string }>
 
 function messageFor(error?: string, detail?: string) {
   if (!error) return undefined;
-  if (error === "not_allowed") return `This app is private. That account isn't allowed in.${detail ? ` (${detail})` : ""}`;
+  if (error === "not_allowed")
+    return `This app is private. That account isn't allowed in.${detail ? ` (${detail})` : ""} If you just changed ALLOWED_EMAIL in Vercel, redeploy so it takes effect.`;
   return explainAuthError(detail ?? "That sign-in link didn't work.");
 }
 
