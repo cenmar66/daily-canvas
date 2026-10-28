@@ -1,0 +1,9 @@
+<!-- Supabase → Authentication → Emails → "Confirm signup". Subject: Your Daily Canvas sign-in code -->
+<div style="font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; color: #2b2a27; max-width: 420px; margin: 0 auto; padding: 24px;">
+  <h2 style="font-family: Georgia, serif; font-weight: 500; margin: 0 0 16px;">The Daily Canvas</h2>
+  <p style="margin: 0 0 8px;">Your sign-in code:</p>
+  <p style="font-size: 32px; letter-spacing: 8px; font-weight: 600; margin: 0 0 20px; color: #3f6b4c;">{{ .Token }}</p>
+  <p style="margin: 0 0 20px; color: #6e6a62; font-size: 14px;">Type it into the sign-in page. On a phone, this keeps you in the same browser or Home Screen app.</p>
+  <p style="margin: 0 0 20px; font-size: 14px;">Or on this device: <a href="{{ .ConfirmationURL }}" style="color: #3f6b4c;">sign in with a link</a>.</p>
+  <p style="color: #9b968c; font-size: 12px; margin: 0;">If you didn't ask to sign in, you can ignore this email.</p>
+</div>
