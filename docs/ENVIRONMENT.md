@@ -4,7 +4,7 @@
 |---|---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Vercel + `.env.local` | Yes | Supabase project (can be the same one Write.ai uses) |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Vercel + `.env.local` | Yes | Browser Supabase client (safe to expose; RLS protects data) |
-| `ALLOWED_EMAIL` | Vercel + `.env.local` | Yes | The one account allowed in |
+| `ALLOWED_EMAIL` | Vercel + `.env.local` | Yes | The account allowed in. Several can be separated by commas, but each email gets its own separate planner. |
 | `ENCRYPTION_KEY` | Vercel | For Google | Encrypts Google tokens (AES-256-GCM). Never change it after connecting, or reconnect afterwards |
 | `GOOGLE_CLIENT_ID` | Vercel | For Google | OAuth client (Calendar + Tasks) |
 | `GOOGLE_CLIENT_SECRET` | Vercel | For Google | Server only; never sent to the browser |

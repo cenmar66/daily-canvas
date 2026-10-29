@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAllowed } from "@/lib/env";
+import { allowedEmails, isAllowed, maskEmail } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 // Google login and magic links both land here with a one-time code (or an error from Supabase).
@@ -22,5 +22,11 @@ export async function GET(request: Request) {
   }
   if (isAllowed(data.user?.email)) return NextResponse.redirect(`${origin}/`);
   await supabase.auth.signOut();
-  return toLogin("not_allowed", process.env.ALLOWED_EMAIL ? `Signed in as ${data.user?.email ?? "unknown"}.` : "ALLOWED_EMAIL isn't set in Vercel.");
+  const allowed = allowedEmails();
+  return toLogin(
+    "not_allowed",
+    allowed.length
+      ? `Signed in as ${data.user?.email ?? "unknown"}. The app is set to allow ${allowed.map(maskEmail).join(", ")}.`
+      : "ALLOWED_EMAIL isn't set for Production in Vercel.",
+  );
 }
