@@ -40,6 +40,14 @@ const same = (a: ReturnType<typeof localShape>, b: ReturnType<typeof remoteShape
   a.title === b.title && a.notes === b.notes && a.done === b.done && a.due === b.due;
 
 export function decide(link: TaskLink, task: Task, remote: GTask | undefined): Decision {
+  return decideWith(link, task, remote, !!remote && same(localShape(task), remoteShape(remote)));
+}
+
+/**
+ * The shared two-way rule for any task service. `matches` says whether the synced
+ * fields are already equal on both sides; `remote.updated` is the service's change marker.
+ */
+export function decideWith(link: TaskLink, task: Task, remote: { updated?: string | null; deleted?: boolean } | undefined, matches: boolean): Decision {
   if (!link.external_id) return { kind: "create" };
   if (!remote || remote.deleted) return { kind: "broken" };
   const resolve = (link.conflict as { resolve?: string } | null)?.resolve;
@@ -47,11 +55,12 @@ export function decide(link: TaskLink, task: Task, remote: GTask | undefined): D
   if (resolve === "remote") return { kind: "pull" };
   if (link.state === "conflict") return { kind: "conflict" };
   const localChanged = task.version !== link.local_version_synced;
-  const remoteChanged = remote.updated !== link.remote_updated;
+  const remoteChanged = (remote.updated ?? null) !== link.remote_updated;
   if (!localChanged && !remoteChanged) return { kind: "none" };
-  if (localChanged && !remoteChanged) return same(localShape(task), remoteShape(remote)) ? { kind: "mark" } : { kind: "push" };
-  if (!localChanged && remoteChanged) return same(localShape(task), remoteShape(remote)) ? { kind: "mark" } : { kind: "pull" };
-  return same(localShape(task), remoteShape(remote)) ? { kind: "mark" } : { kind: "conflict" };
+  if (matches) return { kind: "mark" };
+  if (localChanged && !remoteChanged) return { kind: "push" };
+  if (!localChanged && remoteChanged) return { kind: "pull" };
+  return { kind: "conflict" };
 }
 
 /** Body for creating/updating the Google task from ours. */

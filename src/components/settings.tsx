@@ -13,40 +13,9 @@ import { ENGINE_KEY } from "./dictation";
 import { googleApi, refreshGoogleStatus, useGoogleStatus } from "./google-client";
 import { useCanvas, useSyncStatus } from "./provider";
 import { SyncBadge } from "./shell";
+import { Card, Row, Toggle } from "./settings-ui";
+import { ClickUpCard } from "./clickup-settings";
 import { customLine } from "@/lib/canvas/quotes";
-
-function Card({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
-  return (
-    <section id={id} className="dc-card p-4 md:p-5">
-      <h2 className="dc-serif mb-3 text-xl">{title}</h2>
-      <div className="space-y-4">{children}</div>
-    </section>
-  );
-}
-
-function Row({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <div className="min-w-48 flex-1">
-        <p className="text-sm font-medium">{label}</p>
-        {hint && (
-          <p className="text-xs" style={{ color: "var(--dc-muted)" }}>
-            {hint}
-          </p>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className="relative h-7 w-12 rounded-full transition-colors" style={{ background: on ? "var(--dc-ink)" : "var(--dc-rule)" }}>
-      <span className="absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all" style={{ left: on ? 26 : 4 }} />
-    </button>
-  );
-}
 
 export function SettingsPage() {
   const { planner, prefs } = useCanvas();
@@ -72,6 +41,7 @@ export function SettingsPage() {
       </Card>
       <RemindersCard />
       <Integrations />
+      <ClickUpCard />
       <DataCard />
       <InstallCard />
     </div>
@@ -396,7 +366,7 @@ function Integrations() {
   const [lists, setLists] = useState<{ id: string; title: string }[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [audit, setAudit] = useState<{ id: string; provider: string; action: string; status: string; detail: Record<string, unknown>; at: string }[]>([]);
-  const links = useMemo(() => store.all("canvas_task_links"), [store, rev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const links = useMemo(() => store.all("canvas_task_links").filter((l) => (l.provider ?? "google_tasks") === "google_tasks" && !l.deleted_at), [store, rev]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!g.connected) return;
@@ -529,7 +499,7 @@ function Integrations() {
                 {links.filter((l) => l.state !== "broken").length} linked task(s){g.lastTasksSync ? ` · last ${new Date(g.lastTasksSync).toLocaleString()}` : ""}
               </span>
             </div>
-            {links.some((l) => l.state === "conflict") && <ConflictLinks />}
+            {links.some((l) => l.state === "conflict") && <ConflictLinks provider="google_tasks" />}
           </>
         )}
         <details className="text-sm">
@@ -589,9 +559,10 @@ function Integrations() {
   );
 }
 
-function ConflictLinks() {
+export function ConflictLinks({ provider }: { provider: "google_tasks" | "clickup" }) {
   const { store, rev } = useCanvas();
-  const conflicts = useMemo(() => store.all("canvas_task_links").filter((l) => l.state === "conflict"), [store, rev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const conflicts = useMemo(() => store.all("canvas_task_links").filter((l) => l.state === "conflict" && !l.deleted_at && (l.provider ?? "google_tasks") === provider), [store, rev, provider]); // eslint-disable-line react-hooks/exhaustive-deps
+  const name = provider === "clickup" ? "ClickUp" : "Google";
   return (
     <div className="rounded-lg p-3 text-sm" style={{ background: "#fbf0dc", color: "#6b4a12" }}>
       <p className="mb-1 font-medium">Changed in both places</p>
@@ -602,14 +573,14 @@ function ConflictLinks() {
           return (
             <li key={l.id}>
               <p>
-                Here: “{t?.title}” ({t?.status}) · Google: “{remote.title}” ({remote.status === "completed" ? "done" : "open"})
+                Here: “{t?.title}” ({t?.status}) · {name}: “{remote.title}” ({remote.status === "completed" ? "done" : "open"})
               </p>
               <div className="mt-1 flex gap-2">
                 <button className="dc-btn min-h-0 px-2 py-1 text-xs" onClick={() => store.update("canvas_task_links", l.id, { state: "linked", conflict: { resolve: "local" } })}>
                   Keep mine
                 </button>
                 <button className="dc-btn min-h-0 px-2 py-1 text-xs" onClick={() => store.update("canvas_task_links", l.id, { state: "linked", conflict: { resolve: "remote" } })}>
-                  Keep Google&apos;s
+                  Keep {name}&apos;s
                 </button>
               </div>
             </li>
@@ -661,7 +632,7 @@ function DataCard() {
           Delete all Daily Canvas data
         </p>
         <p className="mb-2 text-xs" style={{ color: "var(--dc-muted)" }}>
-          Removes every planner record from the cloud and this device, and disconnects Google. Your Write.ai documents aren&apos;t touched. Export first if you might want it back. Type DELETE to confirm.
+          Removes every planner record from the cloud and this device, and disconnects Google and ClickUp. Your Write.ai documents aren&apos;t touched. Export first if you might want it back. Type DELETE to confirm.
         </p>
         <div className="flex gap-2">
           <input className="dc-field w-32" value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-label="Type DELETE to confirm" />
@@ -672,6 +643,7 @@ function DataCard() {
             onClick={async () => {
               if (mode === "cloud" && supabase) {
                 await fetch("/api/google/disconnect", { method: "POST" }).catch(() => {});
+                await fetch("/api/clickup/disconnect", { method: "POST" }).catch(() => {});
                 const { error } = await supabase.rpc("canvas_delete_my_data");
                 if (error) return alert(`Couldn't delete: ${error.message}`);
               }

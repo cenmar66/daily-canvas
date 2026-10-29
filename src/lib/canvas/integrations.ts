@@ -1,4 +1,4 @@
-// Task-integration adapters. Google Tasks is the only live one; the shape below is what a
+// Task-integration adapters. Google Tasks and ClickUp are live; the shape below is what a
 // future official Sunsama API (or any other task service) would implement, so it can be
 // added without changing the planner, the link table (canvas_task_links.provider) or the
 // sync rules in gtasks.ts (markers on both sides, never delete, conflicts go to the person).
@@ -28,6 +28,12 @@ export interface TaskAdapter {
 export const INTEGRATIONS: { provider: string; name: string; status: "available" | "unavailable"; note: string }[] = [
   { provider: "google_calendar", name: "Google Calendar", status: "available", note: "Read events from chosen calendars; create, edit or delete only when you confirm." },
   { provider: "google_tasks", name: "Google Tasks", status: "available", note: "Two-way for linked tasks: title, notes, due date (date only), done." },
+  {
+    provider: "clickup",
+    name: "ClickUp",
+    status: "available",
+    note: "Bring in today's ClickUp tasks; two-way for linked tasks: title, due date (date only), done. Notes copied in once.",
+  },
   {
     provider: "sunsama",
     name: "Sunsama (direct)",

@@ -30,7 +30,7 @@ NEXT_PUBLIC_CANVAS_LOCAL_ONLY=1 npm run dev
 
 ## Going live (once)
 
-1. In Supabase → SQL Editor, run [`supabase/migrations/0001_daily_canvas.sql`](supabase/migrations/0001_daily_canvas.sql) (safe to re-run). If you share Write.ai's Supabase project and already ran Write.ai's `0010_daily_canvas.sql`, skip this: it's the same file.
+1. In Supabase → SQL Editor, run [`supabase/migrations/0001_daily_canvas.sql`](supabase/migrations/0001_daily_canvas.sql) (safe to re-run). If you share Write.ai's Supabase project and already ran Write.ai's `0010_daily_canvas.sql`, skip this: it's the same file. For ClickUp, also run [`supabase/migrations/0002_clickup.sql`](supabase/migrations/0002_clickup.sql).
 2. Import this repo in Vercel (New Project), add the environment variables from `.env.example`, deploy, and add `cenmar.org` under Settings → Domains.
 3. Optional: set up Google ([INTEGRATIONS.md](docs/INTEGRATIONS.md)).
 4. Install it: iPhone/iPad Safari → Share → **Add to Home Screen**; Mac Safari → File → **Add to Dock**.

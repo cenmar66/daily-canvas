@@ -4,7 +4,7 @@ The Daily Canvas is its own Next.js app and Vercel project. It can share the Sup
 
 ## 1. Database (Supabase)
 
-Supabase → SQL Editor → New query → paste [`supabase/migrations/0001_daily_canvas.sql`](../supabase/migrations/0001_daily_canvas.sql) → Run. Safe to run again; it never deletes data.
+Supabase → SQL Editor → New query → paste [`supabase/migrations/0001_daily_canvas.sql`](../supabase/migrations/0001_daily_canvas.sql) → Run. Safe to run again; it never deletes data. For ClickUp, run [`0002_clickup.sql`](../supabase/migrations/0002_clickup.sql) the same way.
 
 Check: Table Editor shows the `canvas_*` tables, each with "RLS enabled". Database → Publications → `supabase_realtime` includes a few `canvas_*` tables (for instant cross-device updates; sync still works without it).
 

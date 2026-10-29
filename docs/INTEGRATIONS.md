@@ -6,11 +6,12 @@ Status at a glance:
 |---|---|---|
 | Google Calendar | Built; needs your Google OAuth client to be configured | See events from chosen calendars; create an event only when you ask; edit or delete a Google event only after a confirm |
 | Google Tasks | Built; needs the same Google client | Two-way sync of tasks you link: title, notes, due date (date only), done / not done; optional import of new items |
+| ClickUp | Built; needs your ClickUp API token and `0002_clickup.sql` | Brings in today's ClickUp tasks; two-way for linked tasks: title, due date (date only), done; "Add to ClickUp" from any task |
 | Sunsama | No direct connection (no public API) | Works through Google Calendar time blocks and the Google Tasks bridge |
 | Gmail | Not built (not authorised) | Emails/Calls is a manual tracker |
 | Push notifications when the app is closed | Not built | Reminders work while the app is open/installed and running |
 
-None of these have been tested against live Google accounts from the build environment (no credentials there). The logic is covered by unit tests and the routes by typecheck/build; do the manual steps in [TESTING.md](TESTING.md) after setup.
+None of these have been tested against live Google or ClickUp accounts from the build environment (no credentials there). The logic is covered by unit tests and the routes by typecheck/build; do the manual steps in [TESTING.md](TESTING.md) after setup.
 
 ## Google Cloud setup (about 15 minutes)
 
@@ -71,6 +72,25 @@ What doesn't flow: Sunsama channels, objectives, time estimates, notes made only
 Future: [`src/lib/canvas/integrations.ts`](../src/lib/canvas/integrations.ts) defines a `TaskAdapter` interface; an official Sunsama API can be added as another `provider` in `canvas_task_links` without changing the planner.
 
 Sources: Sunsama help center (Google Tasks integration, timeboxing and "Choosing your calendar" pages) and Sunsama's public roadmap, checked October 2026.
+
+## ClickUp
+
+Uses ClickUp's public REST API (v2) with your **personal API token**. Not tested against a live ClickUp account from the build environment.
+
+**Setup**
+1. Supabase → SQL Editor → run [`supabase/migrations/0002_clickup.sql`](../supabase/migrations/0002_clickup.sql) (safe to re-run).
+2. `ENCRYPTION_KEY` must be set in Vercel (the token is AES-GCM encrypted before it is stored).
+3. ClickUp → avatar → Settings → **Apps** → **API Token** → Generate/Copy (starts with `pk_`).
+4. Planner → Settings → **ClickUp** → paste the token → Connect. Choose the workspace (if you have several), which tasks to bring in, from where, which section, and the list for "Add to ClickUp".
+
+**What happens**
+- **Bringing in**: on opening the app, every 5 minutes while it's in view, and on "Sync ClickUp now", open ClickUp tasks that match your rule appear on today's page (default: assigned to you and due today or earlier; also "due today or earlier (anyone's)" or "everything assigned to me"), from the whole workspace, one space, or one list. Subtasks and closed/archived tasks are skipped. Ids are deterministic, so a task is never brought in twice.
+- **Two-way for linked tasks**: title, due date (date only; sent as midday in your time zone) and done / not done. Completing uses the list's *closed* status (what ClickUp's checkmark does); reopening uses the list's first *open* status. Custom statuses in between are left alone.
+- **Notes**: copied from the ClickUp description once when a task is brought in; never sent back (ClickUp descriptions can carry formatting that plain notes would flatten). "Add to ClickUp" sends the notes once as the new task's description.
+- **Add to ClickUp**: turn it on in a task's details; it's created in your chosen list, assigned to you.
+- **Same safety rules as Google Tasks**: change markers on both sides (`version` here, `date_updated` there) prevent loops; nothing is ever deleted on either side (a task deleted or archived in ClickUp marks the link "broken" and keeps yours); a task changed in both places since the last sync becomes a conflict you settle in Settings → ClickUp.
+- **Disconnect** forgets the token. To revoke it completely, regenerate it in ClickUp → Settings → Apps.
+- **Limits**: ClickUp allows about 100 API requests a minute per token; one sync uses a handful. Up to 500 matching tasks and 80 linked tasks are checked per sync.
 
 ## Integration health
 

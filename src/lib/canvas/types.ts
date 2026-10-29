@@ -191,7 +191,7 @@ export interface InkStroke extends BaseRecord {
 
 export interface TaskLink extends BaseRecord {
   task_id: string;
-  provider: "google_tasks";
+  provider: "google_tasks" | "clickup";
   list_id: string | null;
   external_id: string | null;
   remote_etag: string | null;

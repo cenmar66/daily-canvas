@@ -27,6 +27,7 @@ import { QuickCapture } from "./quick-capture";
 import { TaskSheet } from "./task-sheet";
 import { ConflictBanner } from "./conflicts";
 import { Reminders } from "./reminders";
+import { ClickUpAutoSync } from "./clickup-client";
 import { useIsDark } from "./use-dark";
 
 const NAV = [
@@ -98,6 +99,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <InkPalette />
       <CalendarSync />
       <Reminders />
+      <ClickUpAutoSync />
       {captureOpen && <QuickCapture onClose={() => setCaptureOpen(false)} />}
       {openTask && sheetTask && <TaskSheet key={openTask.id} task={sheetTask} date={openTask.date} onClose={() => setOpenTask(null)} />}
     </div>

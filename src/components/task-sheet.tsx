@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, CalendarArrowUp, Inbox, Link2, Trash2 } from "lucide-react";
+import { Archive, CalendarArrowUp, ExternalLink, Inbox, Link2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { addDays, formatShort } from "@/lib/canvas/dates";
 import { describeRule } from "@/lib/canvas/planning";
@@ -8,6 +8,9 @@ import { TASK_SECTION_TITLES } from "@/lib/canvas/sections";
 import { newId } from "@/lib/canvas/ids";
 import type { ISODate, RecurrenceRule, Task, TaskSection } from "@/lib/canvas/types";
 import { MicButton } from "./dictation";
+import { clickUpUrl } from "@/lib/canvas/clickup-sync";
+import type { TaskLink } from "@/lib/canvas/types";
+import { useClickUpStatus } from "./clickup-client";
 import { useCanvas } from "./provider";
 import { Field, Sheet } from "./sheet";
 import { Checkbox, useCompleteTask } from "./tasks";
@@ -20,7 +23,7 @@ export function TaskSheet({ task: initial, date, onClose }: { task: Task; date: 
   const subs = useMemo(() => planner.subtasks(task.id), [planner, task.id, rev]); // eslint-disable-line react-hooks/exhaustive-deps
   const events = useMemo(() => store.all("canvas_task_events").filter((e) => e.task_id === task.id).sort((a, b) => a.at.localeCompare(b.at)), [store, task.id, rev]); // eslint-disable-line react-hooks/exhaustive-deps
   const recurrence = task.recurrence_id ? store.get("canvas_recurrences", task.recurrence_id) : undefined;
-  const link = useMemo(() => store.all("canvas_task_links").find((l) => l.task_id === task.id), [store, task.id, rev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clickUp = useClickUpStatus();
   const complete = useCompleteTask();
   const [notes, setNotes] = useState(task.notes);
   const [title, setTitle] = useState(task.title);
@@ -221,40 +224,9 @@ export function TaskSheet({ task: initial, date, onClose }: { task: Task; date: 
         </div>
 
         {mode === "cloud" && (
-          <div className="rounded-lg p-3 text-sm" style={{ background: "var(--dc-paper-2)" }}>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={!!link && !link.deleted_at && link.state !== "broken"}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    if (link) store.update("canvas_task_links", link.id, { deleted_at: null, state: link.external_id ? "linked" : "pending" });
-                    else
-                      store.create("canvas_task_links", {
-                        id: newId(),
-                        task_id: task.id,
-                        provider: "google_tasks",
-                        list_id: null,
-                        external_id: null,
-                        remote_etag: null,
-                        remote_updated: null,
-                        local_version_synced: null,
-                        state: "pending",
-                        conflict: null,
-                        last_synced_at: null,
-                      });
-                  } else if (link) store.remove("canvas_task_links", link.id);
-                }}
-              />
-              <Link2 size={14} /> Sync with Google Tasks
-            </label>
-            {link && !link.deleted_at && (
-              <p className="mt-1 text-xs" style={{ color: "var(--dc-muted)" }}>
-                {link.state === "pending" && "Will be sent on the next Google Tasks sync (Settings → Integrations)."}
-                {link.state === "linked" && `Linked${link.last_synced_at ? ` · last synced ${new Date(link.last_synced_at).toLocaleString()}` : ""}`}
-                {link.state === "conflict" && "Changed in both places — resolve it in Settings → Integrations."}
-              </p>
-            )}
+          <div className="space-y-2 rounded-lg p-3 text-sm" style={{ background: "var(--dc-paper-2)" }}>
+            <LinkToggle taskId={task.id} provider="google_tasks" label="Sync with Google Tasks" where="Settings → Integrations" />
+            {clickUp.connected && <LinkToggle taskId={task.id} provider="clickup" label="Add to ClickUp" where="Settings → ClickUp" />}
           </div>
         )}
 
@@ -327,6 +299,57 @@ function RepeatPicker({ value, date, onChange }: { value: RecurrenceRule | null;
       {value && (
         <p className="text-xs" style={{ color: "var(--dc-muted)" }}>
           {describeRule(value)}. A new copy appears on each matching day when you open the planner; unfinished copies don&apos;t pile up.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Turn a task's link to Google Tasks or ClickUp on or off, and show where it stands. */
+function LinkToggle({ taskId, provider, label, where }: { taskId: string; provider: TaskLink["provider"]; label: string; where: string }) {
+  const { store, rev } = useCanvas();
+  const link = useMemo(() => store.all("canvas_task_links").find((l) => l.task_id === taskId && (l.provider ?? "google_tasks") === provider), [store, taskId, provider, rev]); // eslint-disable-line react-hooks/exhaustive-deps
+  const on = !!link && !link.deleted_at && link.state !== "broken";
+  const name = provider === "clickup" ? "ClickUp" : "Google Tasks";
+  return (
+    <div>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => {
+            if (e.target.checked) {
+              if (link) store.update("canvas_task_links", link.id, { deleted_at: null, state: link.external_id ? "linked" : "pending" });
+              else
+                store.create("canvas_task_links", {
+                  id: newId(),
+                  task_id: taskId,
+                  provider,
+                  list_id: null,
+                  external_id: null,
+                  remote_etag: null,
+                  remote_updated: null,
+                  local_version_synced: null,
+                  state: "pending",
+                  conflict: null,
+                  last_synced_at: null,
+                });
+            } else if (link) store.remove("canvas_task_links", link.id);
+          }}
+        />
+        <Link2 size={14} /> {label}
+      </label>
+      {link && !link.deleted_at && (
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs" style={{ color: "var(--dc-muted)" }}>
+          {link.state === "pending" && `Will be sent on the next ${name} sync.`}
+          {link.state === "linked" && `Linked${link.last_synced_at ? ` · last synced ${new Date(link.last_synced_at).toLocaleString()}` : ""}`}
+          {link.state === "conflict" && `Changed in both places — resolve it in ${where}.`}
+          {link.state === "broken" && `No longer found in ${name} (deleted or moved). Your task here is kept.`}
+          {provider === "clickup" && link.external_id && link.state !== "broken" && (
+            <a className="inline-flex items-center gap-1 underline" href={clickUpUrl(link.external_id)} target="_blank" rel="noreferrer">
+              <ExternalLink size={12} /> Open in ClickUp
+            </a>
+          )}
         </p>
       )}
     </div>
