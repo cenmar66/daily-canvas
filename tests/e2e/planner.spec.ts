@@ -141,6 +141,43 @@ test.describe("days and rollover", () => {
   });
 });
 
+test.describe("rollover covers every task section", () => {
+  test("unfinished items in every task section move to the next day", async ({ page }, info) => {
+    desktopOnly(info.project.name);
+    await page.clock.setFixedTime(new Date("2026-10-28T17:00:00Z"));
+    await openPlanner(page);
+    await addTask(page, "What matters most today?", "Must carry");
+    await addTask(page, "Add a work to-do…", "Work carry");
+    await addTask(page, "Add a personal to-do…", "Personal carry");
+    await addTask(page, "Add something to buy…", "Batteries");
+    await page.getByRole("checkbox", { name: /Personal carry/ }).click();
+    await page.waitForTimeout(300);
+    await page.clock.setFixedTime(new Date("2026-10-29T17:00:00Z"));
+    await page.reload();
+    await openPlanner(page);
+    await expect(page.getByRole("heading", { name: "Thursday, October 29, 2026" })).toBeVisible();
+    await expect(page.locator("#section-must").getByText("Must carry")).toBeVisible();
+    await expect(page.locator("#section-work").getByText("Work carry")).toBeVisible();
+    await expect(page.locator("#section-shopping").getByText("Batteries")).toBeVisible();
+    await expect(page.getByText("Personal carry")).toHaveCount(0); // done stays on its own day
+  });
+});
+
+test("phone: yesterday's unfinished tasks show on today's list", async ({ page }, info) => {
+  test.skip(info.project.name !== "iphone");
+  await page.clock.setFixedTime(new Date("2026-10-28T17:00:00Z"));
+  await openPlanner(page);
+  await page.getByRole("button", { name: /Work To-Dos/ }).click();
+  await addTask(page, "Add a work to-do…", "Phone carry");
+  await page.waitForTimeout(300);
+  await page.clock.setFixedTime(new Date("2026-10-29T17:00:00Z"));
+  await page.reload();
+  await openPlanner(page);
+  await expect(page.getByText("October 29, 2026")).toBeVisible();
+  await page.getByRole("button", { name: /Work To-Dos/ }).click();
+  await expect(page.getByText("Phone carry")).toBeVisible();
+});
+
 test.describe("the rest of the page", () => {
   test("water, good things, ideas, notes, meals, exercise persist", async ({ page }, info) => {
     desktopOnly(info.project.name);

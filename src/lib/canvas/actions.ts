@@ -17,6 +17,8 @@ import type {
 } from "./types";
 import { localDateOf } from "./dates";
 
+export const CARRY_SHOPPING_DEFAULT_SINCE = "2026-10-30T00:00:00Z";
+
 export const DEFAULT_PREFS: Omit<Preferences, "id" | "created_at" | "updated_at" | "version" | "deleted_at"> = {
   timezone: "America/Los_Angeles",
   theme: "system",
@@ -29,7 +31,7 @@ export const DEFAULT_PREFS: Omit<Preferences, "id" | "created_at" | "updated_at"
   color_theme: "paper-classic",
   water_target: 8,
   glass_ml: 250,
-  carry_shopping: false,
+  carry_shopping: true,
   dictation_lang: "en-US",
   ai_interpreter: false,
   reminders: {},
@@ -70,9 +72,23 @@ export class Planner {
     this.store.create("canvas_task_events", { id, task_id: taskId, kind, at, local_date: localDateOf(at, this.tz), data });
   }
 
+  /**
+   * One-time settings upgrades. Since Oct 30 2026 unfinished To Buy items carry forward
+   * like everything else. Turn that on for settings saved before then (when it was off by
+   * default); a choice made after that date is left alone. Only touches a saved row, so a
+   * fresh device that hasn't synced yet can't overwrite the real settings.
+   */
+  private upgradePrefs() {
+    const row = this.store.get("canvas_preferences", this.prefsId);
+    if (row && row.carry_shopping === false && (row.updated_at ?? "") < CARRY_SHOPPING_DEFAULT_SINCE) {
+      this.store.update("canvas_preferences", this.prefsId, { carry_shopping: true });
+    }
+  }
+
   // ---- daily planning: rollover + recurring occurrences --------------------------
   /** Safe to call any number of times (deterministic ids). Only meaningful for today. */
   planDay(today: ISODate) {
+    this.upgradePrefs();
     const prefs = this.prefs();
     const tasks = this.store.all("canvas_tasks");
     const placements = this.store.allWithDeleted("canvas_task_placements");

@@ -48,7 +48,7 @@ create table if not exists public.canvas_preferences (
   color_theme text not null default 'paper-classic',
   water_target integer not null default 8 check (water_target between 1 and 24),
   glass_ml integer not null default 250 check (glass_ml between 50 and 2000),
-  carry_shopping boolean not null default false,
+  carry_shopping boolean not null default true,
   dictation_lang text not null default 'en-US',
   ai_interpreter boolean not null default false,
   reminders jsonb not null default '{}'::jsonb,
