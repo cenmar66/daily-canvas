@@ -31,6 +31,23 @@ export async function runSetupCheck(origin: string): Promise<{ checks: Check[]; 
     fix: "Add ALLOWED_EMAIL = cenmarf@gmail.com in Vercel (all environments), then redeploy.",
   });
 
+  // Needed to store Google and ClickUp connections; sign-in works without it.
+  const encOk = (process.env.ENCRYPTION_KEY ?? "").length >= 16;
+  checks.push({
+    label: "Encryption key is set (for Google Calendar and ClickUp)",
+    ok: encOk,
+    fix: "Add ENCRYPTION_KEY in Vercel (any long random text, 32+ characters) for Production, then redeploy. Without it Google Calendar and ClickUp can't connect; sign-in still works.",
+  });
+  const gId = !!process.env.GOOGLE_CLIENT_ID;
+  const gSecret = !!process.env.GOOGLE_CLIENT_SECRET;
+  if (gId !== gSecret) {
+    checks.push({
+      label: "Google Calendar keys are both set",
+      ok: false,
+      fix: `Only ${gId ? "GOOGLE_CLIENT_ID" : "GOOGLE_CLIENT_SECRET"} is set in Vercel. Add the other one too (same Google OAuth client), then redeploy.`,
+    });
+  }
+
   if (urlOk && keyOk) {
     try {
       const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/settings`, {

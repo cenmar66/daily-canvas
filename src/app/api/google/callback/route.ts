@@ -13,6 +13,11 @@ export async function GET(request: Request) {
   if (!code) return back("google_error=no_code");
   try {
     const t = await exchangeCode(code, url.origin);
+    // Google's permission screen lets people untick boxes; without these the connection is useless.
+    if (!/calendar\.events|auth\/tasks/.test(t.scope ?? "")) {
+      await audit(g.supabase, "google", "connect", "error", { message: "scope_missing", scopes: t.scope });
+      return back("google_error=scope_missing");
+    }
     await saveTokens(g.supabase, g.userId, t, await getAccount(g.supabase));
     await audit(g.supabase, "google", "connect", "ok", { scopes: t.scope });
     return back("google=connected");

@@ -16,6 +16,7 @@ import { SyncBadge } from "./shell";
 import { Card, Row, Toggle } from "./settings-ui";
 import { ClickUpCard } from "./clickup-settings";
 import { customLine } from "@/lib/canvas/quotes";
+import { explainGoogleError } from "@/lib/canvas/google-errors";
 
 export function SettingsPage() {
   const { planner, prefs } = useCanvas();
@@ -367,13 +368,35 @@ function Integrations() {
   const [busy, setBusy] = useState(false);
   const [audit, setAudit] = useState<{ id: string; provider: string; action: string; status: string; detail: Record<string, unknown>; at: string }[]>([]);
   const links = useMemo(() => store.all("canvas_task_links").filter((l) => (l.provider ?? "google_tasks") === "google_tasks" && !l.deleted_at), [store, rev]); // eslint-disable-line react-hooks/exhaustive-deps
+  // What happened on the way back from Google's sign-in screen (it's in the address).
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("google_error");
+    if (err) return { ok: false, text: explainGoogleError(err) };
+    if (q.get("google") === "connected") return { ok: true, text: "Google connected." };
+    return null;
+  });
+  const [calError, setCalError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const why = (e: unknown) => explainGoogleError(e instanceof Error ? e.message : String(e));
 
   useEffect(() => {
-    if (!g.connected) return;
-    if (g.canReadCalendar) googleApi.calendars().then((r) => setCals(r.calendars)).catch(() => setCals([]));
-    if (g.canTasks) googleApi.taskLists().then((r) => setLists(r.lists)).catch(() => setLists([]));
+    const q = new URLSearchParams(window.location.search);
+    if (q.has("google_error") || q.has("google")) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
+      void refreshGoogleStatus();
+      document.getElementById("integrations")?.scrollIntoView({ block: "start" });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!g.configured) return;
     googleApi.audit().then((r) => setAudit(r.entries)).catch(() => {});
-  }, [g.connected, g.canReadCalendar, g.canTasks]);
+    if (!g.connected) return;
+    if (g.canReadCalendar) googleApi.calendars().then((r) => (setCals(r.calendars), setCalError(null))).catch((e) => (setCals([]), setCalError(why(e))));
+    if (g.canTasks) googleApi.taskLists().then((r) => (setLists(r.lists), setListError(null))).catch((e) => (setLists([]), setListError(why(e))));
+  }, [g.configured, g.connected, g.canReadCalendar, g.canTasks]);
 
   if (mode !== "cloud")
     return (
@@ -395,6 +418,19 @@ function Integrations() {
 
   return (
     <Card title="Integrations" id="integrations">
+      {notice && (
+        <div role="status" className="flex items-start gap-2 rounded-lg p-3 text-sm" style={notice.ok ? { background: "#e4efe6", color: "#2f5a3a" } : { background: "#f8e3e0", color: "#8a2b22" }}>
+          <p className="flex-1">{notice.text}</p>
+          <button className="text-xs underline" onClick={() => setNotice(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      {g.connected && !g.canReadCalendar && !g.canTasks && (
+        <p className="rounded-lg p-3 text-sm" style={{ background: "#fbf0dc", color: "#6b4a12" }}>
+          {explainGoogleError("scope_missing")}
+        </p>
+      )}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Calendar size={18} />
@@ -414,6 +450,11 @@ function Integrations() {
             <p className="text-xs" style={{ color: "var(--dc-muted)" }}>
               Shown in Appointments. Events stay in Google: checking off an appointment here never changes or deletes them. New events are only created when you ask.
             </p>
+            {calError && (
+              <p className="rounded-lg p-3 text-sm" style={{ background: "#f8e3e0", color: "#8a2b22" }}>
+                Couldn&apos;t load your calendars. {calError}
+              </p>
+            )}
             <ul className="space-y-1">
               {(cals ?? []).map((c) => {
                 const on = g.selectedCalendars.length ? g.selectedCalendars.includes(c.id) : !!c.primary;
@@ -453,6 +494,11 @@ function Integrations() {
         )}
         {g.canTasks && (
           <>
+            {listError && (
+              <p className="rounded-lg p-3 text-sm" style={{ background: "#f8e3e0", color: "#8a2b22" }}>
+                Couldn&apos;t load your Google Tasks lists. {listError}
+              </p>
+            )}
             <Row label="Google Tasks list" hint="Use a dedicated list, e.g. “Daily Canvas”. Only tasks you link (in a task's details) are sent.">
               <select className="dc-field w-56" value={g.tasksListId ?? ""} onChange={(e) => void save({ tasksListId: e.target.value || null })}>
                 <option value="">Choose a list…</option>
@@ -519,13 +565,13 @@ function Integrations() {
         </details>
       </div>
 
-      {g.connected && (
+      {(g.connected || !!g.lastError || audit.length > 0) && (
         <div className="space-y-2 border-t pt-4" style={{ borderColor: "var(--dc-line)" }}>
           <p className="font-medium">Integration health</p>
           <ul className="space-y-0.5 text-xs" style={{ color: "var(--dc-muted)" }}>
             <li>Calendar last refreshed: {g.lastCalendarSync ? new Date(g.lastCalendarSync).toLocaleString() : "not yet"}</li>
             <li>Google Tasks last synced: {g.lastTasksSync ? new Date(g.lastTasksSync).toLocaleString() : "not yet"}</li>
-            {g.lastError && <li style={{ color: "#a33" }}>Last problem: {g.lastError}</li>}
+            {g.lastError && <li style={{ color: "#a33" }}>Last problem: {explainGoogleError(g.lastError)}</li>}
           </ul>
           {audit.length > 0 && (
             <details className="text-xs">
@@ -540,6 +586,7 @@ function Integrations() {
               </ul>
             </details>
           )}
+          {g.connected && (
           <button
             className="dc-btn"
             style={{ color: "#a33" }}
@@ -553,6 +600,7 @@ function Integrations() {
           >
             Disconnect Google
           </button>
+          )}
         </div>
       )}
     </Card>
