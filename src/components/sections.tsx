@@ -51,6 +51,9 @@ type Row = { kind: "local"; a: Appointment; start: string | null; end: string | 
 
 export function AppointmentsCard({ date }: { date: ISODate }) {
   const { planner, store, rev, prefs } = useCanvas();
+  const google = useGoogleStatus();
+  const canDeleteGoogle = google.connected && google.canWriteCalendar;
+  const deleteEvent = useDeleteGoogleEvent();
   const [editing, setEditing] = useState<Appointment | "new" | null>(null);
   const [ext, setExt] = useState<ExternalEvent | null>(null);
   const rows = useMemo<Row[]>(() => {
@@ -95,12 +98,12 @@ export function AppointmentsCard({ date }: { date: ISODate }) {
               {overlaps.has(i) && <span className="dc-chip" style={{ color: "#a3592f" }}>overlaps</span>}
             </li>
           ) : (
-            <li key={r.e.key} className="flex items-center gap-2 pl-3 pr-1">
+            <li key={r.e.key} className="group flex items-center gap-2 pl-3 pr-1">
               <span className="ml-0.5 mr-0.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.e.calendarColor ?? "#6189b8" }} title={r.e.calendarName} />
               <span className="w-16 shrink-0 text-xs tabular-nums" style={{ color: "var(--dc-muted)" }}>
                 {r.e.allDay ? "All day" : formatTime(r.start)}
               </span>
-              <button className="min-w-0 flex-1 truncate text-left text-[0.9rem]" onClick={() => setExt(r.e)}>
+              <button className="min-w-0 flex-1 truncate text-left text-[0.9rem] hover:underline" onClick={() => setExt(r.e)} aria-label={`Open ${r.e.title}`}>
                 {r.e.title}
                 {r.e.location && <span className="ml-1 text-xs" style={{ color: "var(--dc-faint)" }}>· {r.e.location}</span>}
               </button>
@@ -109,9 +112,19 @@ export function AppointmentsCard({ date }: { date: ISODate }) {
               </span>
               {overlaps.has(i) && <span className="dc-chip" style={{ color: "#a3592f" }}>overlaps</span>}
               {r.e.htmlLink && (
-                <a className="dc-icon-btn sm" href={r.e.htmlLink} target="_blank" rel="noreferrer" aria-label={`Open ${r.e.title} in Google Calendar`}>
+                <a className="dc-icon-btn sm dc-noprint" href={r.e.htmlLink} target="_blank" rel="noreferrer" aria-label={`Open ${r.e.title} in Google Calendar`}>
                   <ExternalLink size={13} />
                 </a>
+              )}
+              {canDeleteGoogle && (
+                <button
+                  className="dc-icon-btn sm dc-noprint opacity-40 group-hover:opacity-100 focus:opacity-100"
+                  aria-label={`Delete ${r.e.title} from Google Calendar`}
+                  title="Delete from Google Calendar"
+                  onClick={() => void deleteEvent(r.e)}
+                >
+                  <Trash2 size={13} />
+                </button>
               )}
             </li>
           ),
@@ -144,6 +157,24 @@ function QuickAppointment({ date, onAdd }: { date: ISODate; onAdd: (a: Partial<A
 }
 
 /** A Google event: read here; changes go to Google only after an explicit confirm. */
+/** Delete a Google Calendar event after a confirm, then drop it from the page. */
+function useDeleteGoogleEvent() {
+  const { toast, store } = useCanvas();
+  return async (e: ExternalEvent): Promise<boolean> => {
+    const when = e.allDay ? "all-day event" : "event";
+    if (!window.confirm(`Delete the ${when} “${e.title}” from Google Calendar?\n\nIt goes to Google Calendar's Trash, where you can restore it for 30 days.`)) return false;
+    const r = await fetch(`/api/google/events/${encodeURIComponent(e.calendarId)}/${encodeURIComponent(e.eventId)}?confirmed=1`, { method: "DELETE" });
+    if (!r.ok) {
+      const msg = String((await r.json().catch(() => ({}))).error ?? "");
+      toast(/forbidden|writer access|insufficient|403/i.test(msg) ? `You can only view “${e.calendarName}”, so its events can't be deleted from here.` : msg || "Couldn't delete the event");
+      return false;
+    }
+    store.setExternalEvents(e.date, e.date, store.externalEvents(e.date).filter((x) => x.key !== e.key));
+    toast("Deleted from Google Calendar");
+    return true;
+  };
+}
+
 function ExternalEventSheet({ e, onClose }: { e: ExternalEvent; onClose: () => void }) {
   const { prefs, toast, store } = useCanvas();
   const google = useGoogleStatus();
@@ -151,28 +182,26 @@ function ExternalEventSheet({ e, onClose }: { e: ExternalEvent; onClose: () => v
   const [start, setStart] = useState(e.allDay ? "" : localTimeOf(e.start, prefs.timezone));
   const [end, setEnd] = useState(e.allDay ? "" : localTimeOf(e.end, prefs.timezone));
   const [busy, setBusy] = useState(false);
+  const deleteEvent = useDeleteGoogleEvent();
   const path = `/api/google/events/${encodeURIComponent(e.calendarId)}/${encodeURIComponent(e.eventId)}`;
-  const refresh = () => store.setExternalEvents(e.date, e.date, store.externalEvents(e.date).filter((x) => x.eventId !== e.eventId));
   const save = async () => {
     if (!window.confirm(`Update “${e.title}” in Google Calendar?`)) return;
     setBusy(true);
     const r = await fetch(path, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed: true, title, ...(start && end && !e.allDay ? { date: e.date, start, end, timeZone: prefs.timezone } : {}) }) });
     setBusy(false);
     if (!r.ok) return toast((await r.json().catch(() => ({}))).error ?? "Couldn't update the event");
+    // Show the change straight away; the next calendar refresh confirms it.
+    store.setExternalEvents(e.date, e.date, store.externalEvents(e.date).map((x) => (x.key === e.key ? { ...x, title } : x)));
     toast("Updated in Google Calendar");
     onClose();
   };
   const remove = async () => {
-    if (!window.confirm(`Delete “${e.title}” from Google Calendar? This can't be undone here.`)) return;
     setBusy(true);
-    const r = await fetch(`${path}?confirmed=1`, { method: "DELETE" });
+    const ok = await deleteEvent(e);
     setBusy(false);
-    if (!r.ok) return toast((await r.json().catch(() => ({}))).error ?? "Couldn't delete the event");
-    refresh();
-    toast("Deleted from Google Calendar");
-    onClose();
+    if (ok) onClose();
   };
-  const editable = google.connected && google.canWriteCalendar && !e.allDay;
+  const editable = google.connected && google.canWriteCalendar;
   return (
     <Sheet
       title="Google Calendar event"
@@ -190,7 +219,7 @@ function ExternalEventSheet({ e, onClose }: { e: ExternalEvent; onClose: () => v
             </button>
           )}
           {editable && (
-            <button className="dc-btn dc-btn-primary ml-auto" disabled={busy} onClick={save}>
+            <button className="dc-btn dc-btn-primary ml-auto" disabled={busy || !title.trim()} onClick={save}>
               Save to Google
             </button>
           )}
@@ -200,8 +229,14 @@ function ExternalEventSheet({ e, onClose }: { e: ExternalEvent; onClose: () => v
       <div className="space-y-3">
         <p className="text-xs" style={{ color: "var(--dc-muted)" }}>
           From {e.calendarName}
-          {e.isTimeBlock ? " · looks like a planned time block" : ""}. Shown as of the last refresh.
+          {e.isTimeBlock ? " · looks like a planned time block" : ""}
+          {e.allDay ? " · all day" : ""}. Changes and deletes go straight to Google Calendar.
         </p>
+        {!editable && (
+          <p className="rounded-lg p-3 text-sm" style={{ background: "#fbf0dc", color: "#6b4a12" }}>
+            To edit or delete Google events here, connect Google Calendar in Settings → Integrations (with every permission ticked).
+          </p>
+        )}
         <Field label="Title">
           <input className="dc-field" value={title} onChange={(x) => setTitle(x.target.value)} disabled={!editable} />
         </Field>
