@@ -87,7 +87,7 @@ export const googleApi = {
   audit: () => api<{ entries: { id: string; provider: string; action: string; status: string; detail: Record<string, unknown>; at: string }[] }>("/api/google/audit"),
 };
 
-export async function createGoogleEvent(e: { title: string; date: ISODate; start: string; end: string | null; location: string | null; notes: string; timeZone: string }) {
+export async function createGoogleEvent(e: { title: string; date: ISODate; start: string | null; end: string | null; location: string | null; notes: string; timeZone: string }) {
   return api<{ id: string; htmlLink: string }>("/api/google/events", { method: "POST", body: JSON.stringify(e) });
 }
 
@@ -95,6 +95,10 @@ export async function createGoogleEvent(e: { title: string; date: ISODate; start
  * Keeps the device's cache of Google events fresh around the day being viewed.
  * Cached events stay visible offline (marked as from Google; read-only here).
  */
+// Lets other parts of the app ask for a fresh copy of Google events right away.
+let reloadCalendar: (() => Promise<void>) | null = null;
+export const refreshCalendarNow = () => reloadCalendar?.() ?? Promise.resolve();
+
 export function CalendarSync() {
   const { date, store, prefs, mode } = useCanvas();
   const g = useGoogleStatus();
@@ -113,10 +117,18 @@ export function CalendarSync() {
       }
     };
     void load();
+    reloadCalendar = load;
     const t = setInterval(load, 5 * 60_000);
+    // Coming back to the app picks up events added or deleted in Google meanwhile.
+    const onShow = () => document.visibilityState === "visible" && void load();
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
     return () => {
       stop = true;
+      if (reloadCalendar === load) reloadCalendar = null;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", onShow);
     };
   }, [date, store, prefs.timezone, mode, g.connected, g.canReadCalendar, g.selectedCalendars.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;

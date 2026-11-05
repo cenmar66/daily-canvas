@@ -286,6 +286,8 @@ export interface ExternalEvent {
   htmlLink?: string;
   isTimeBlock?: boolean; // looks like a task time block (e.g. created by Sunsama)
   date: ISODate; // local date it is shown on
+  done?: boolean; // checked off in the planner (kept on the Google event itself)
+  writable?: boolean; // you can change this calendar (owner/writer)
 }
 
 export interface Conflict {

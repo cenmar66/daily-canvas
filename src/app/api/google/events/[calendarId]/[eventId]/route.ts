@@ -1,4 +1,5 @@
 import { isISODate, isValidTimeZone, zonedTimeToUtc } from "@/lib/canvas/dates";
+import { DONE_PROP, doneDates, withDoneDate, type GEvent } from "@/lib/canvas/gcal";
 import { audit, getAccount, gfetch } from "@/lib/canvas/google";
 import { fail, guard } from "../../../_auth";
 
@@ -10,10 +11,25 @@ export async function PATCH(request: Request, { params }: Ctx) {
   const g = await guard(20);
   if ("denied" in g) return g.denied;
   const { calendarId, eventId } = await params;
-  const b = (await request.json().catch(() => ({}))) as { title?: string; date?: string; start?: string; end?: string; location?: string; timeZone?: string; confirmed?: boolean };
-  if (!b.confirmed) return Response.json({ error: "Confirmation required." }, { status: 400 });
+  const b = (await request.json().catch(() => ({}))) as { title?: string; date?: string; start?: string; end?: string; location?: string; timeZone?: string; confirmed?: boolean; done?: boolean };
   const acc = await getAccount(g.supabase);
   if (!acc?.refresh_token_enc) return Response.json({ error: "Not connected." }, { status: 400 });
+
+  // Checking an event off in the planner: stored on the event (a private property Google
+  // Calendar doesn't display), so it shows on every device. Title and time are untouched.
+  if (typeof b.done === "boolean" && isISODate(b.date)) {
+    try {
+      const cur = await gfetch<GEvent>(g.supabase, acc, url(calendarId, eventId));
+      if (cur.status === 404 || cur.status === 410) return Response.json({ error: "That event no longer exists in Google Calendar." }, { status: 404 });
+      const value = withDoneDate(doneDates(cur.data), b.date, b.done);
+      await gfetch(g.supabase, acc, url(calendarId, eventId), { method: "PATCH", body: JSON.stringify({ extendedProperties: { private: { [DONE_PROP]: value } } }) });
+      return Response.json({ ok: true, done: b.done });
+    } catch (e) {
+      return fail(e);
+    }
+  }
+
+  if (!b.confirmed) return Response.json({ error: "Confirmation required." }, { status: 400 });
   const patch: Record<string, unknown> = {};
   if (typeof b.title === "string") patch.summary = b.title.slice(0, 500);
   if (typeof b.location === "string") patch.location = b.location;

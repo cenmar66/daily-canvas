@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatTime, localTimeOf } from "@/lib/canvas/dates";
 import type { Appointment, ExternalEvent, Idea, ISODate, MealSlot, TaskSection } from "@/lib/canvas/types";
-import { createGoogleEvent, useGoogleStatus } from "./google-client";
+import { createGoogleEvent, refreshCalendarNow, useGoogleStatus } from "./google-client";
 import { MicButton } from "./dictation";
 import { useCanvas } from "./provider";
 import { MenuItem, SectionCard, useLocalFlag } from "./section-card";
@@ -54,6 +54,26 @@ export function AppointmentsCard({ date }: { date: ISODate }) {
   const google = useGoogleStatus();
   const canDeleteGoogle = google.connected && google.canWriteCalendar;
   const deleteEvent = useDeleteGoogleEvent();
+  const { toast } = useCanvas();
+  /** Tick a Google event: shown at once, saved on the event so every device sees it. */
+  const toggleGoogleDone = async (e: ExternalEvent) => {
+    const flip = (done: boolean) => store.setExternalEvents(e.date, e.date, store.externalEvents(e.date).map((x) => (x.key === e.key ? { ...x, done } : x)));
+    const next = !e.done;
+    flip(next);
+    if (!canDeleteGoogle || e.writable === false) {
+      flip(!next);
+      return toast(e.writable === false ? `“${e.calendarName}” is view-only, so its events can't be checked off.` : "Connect Google Calendar in Settings to check off Google events.");
+    }
+    const r = await fetch(`/api/google/events/${encodeURIComponent(e.calendarId)}/${encodeURIComponent(e.eventId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: next, date: e.date }),
+    }).catch(() => null);
+    if (!r?.ok) {
+      flip(!next);
+      toast(r ? String((await r.json().catch(() => ({}))).error ?? "Couldn't save the check-off") : "You're offline. Try again when you're back online.");
+    }
+  };
   const [editing, setEditing] = useState<Appointment | "new" | null>(null);
   const [ext, setExt] = useState<ExternalEvent | null>(null);
   const rows = useMemo<Row[]>(() => {
@@ -99,12 +119,17 @@ export function AppointmentsCard({ date }: { date: ISODate }) {
             </li>
           ) : (
             <li key={r.e.key} className="group flex items-center gap-2 pl-3 pr-1">
-              <span className="ml-0.5 mr-0.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: r.e.calendarColor ?? "#6189b8" }} title={r.e.calendarName} />
+              <Checkbox
+                checked={!!r.e.done}
+                onToggle={() => void toggleGoogleDone(r.e)}
+                label={`${r.e.done ? "Mark not done" : "Mark done"}: ${r.e.title}`}
+              />
+              <span className="-ml-1 h-2 w-2 shrink-0 rounded-full" style={{ background: r.e.calendarColor ?? "#6189b8" }} title={r.e.calendarName} />
               <span className="w-16 shrink-0 text-xs tabular-nums" style={{ color: "var(--dc-muted)" }}>
                 {r.e.allDay ? "All day" : formatTime(r.start)}
               </span>
-              <button className="min-w-0 flex-1 truncate text-left text-[0.9rem] hover:underline" onClick={() => setExt(r.e)} aria-label={`Open ${r.e.title}`}>
-                {r.e.title}
+              <button className={`min-w-0 flex-1 truncate text-left text-[0.9rem] hover:underline ${r.e.done ? "dc-done" : ""}`} onClick={() => setExt(r.e)} aria-label={`Open ${r.e.title}`}>
+                <span className="dc-strike">{r.e.title}</span>
                 {r.e.location && <span className="ml-1 text-xs" style={{ color: "var(--dc-faint)" }}>· {r.e.location}</span>}
               </button>
               <span className="dc-chip" title={`From Google Calendar: ${r.e.calendarName}`}>
@@ -138,11 +163,35 @@ export function AppointmentsCard({ date }: { date: ISODate }) {
 }
 
 function QuickAppointment({ date, onAdd }: { date: ISODate; onAdd: (a: Partial<Appointment> & { date: ISODate; title: string }) => void }) {
+  const { prefs, toast } = useCanvas();
+  const google = useGoogleStatus();
   const [time, setTime] = useState("");
   const [title, setTitle] = useState("");
-  const add = () => {
-    if (!title.trim()) return;
-    onAdd({ date, title: title.trim(), start_time: time || null });
+  const [busy, setBusy] = useState(false);
+  // New appointments go to Google Calendar when it's connected (switchable per device).
+  const [plannerOnly, setPlannerOnly] = useLocalFlag("dc-appt-planner-only");
+  const canGoogle = google.connected && google.canWriteCalendar;
+  const toGoogle = canGoogle && !plannerOnly;
+  const add = async () => {
+    const t = title.trim();
+    if (!t || busy) return;
+    if (toGoogle && navigator.onLine) {
+      setBusy(true);
+      try {
+        await createGoogleEvent({ title: t, date, start: time || null, end: null, location: null, notes: "", timeZone: prefs.timezone });
+        await refreshCalendarNow();
+        toast("Added to Google Calendar");
+      } catch (e) {
+        // Never lose what was typed: keep it in the planner instead.
+        onAdd({ date, title: t, start_time: time || null });
+        toast(`Saved in the planner only (Google said: ${e instanceof Error ? e.message : "error"})`);
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      onAdd({ date, title: t, start_time: time || null });
+      if (toGoogle) toast("You're offline, so it's saved in the planner only. Use “Move to Google Calendar” later.");
+    }
     setTitle("");
     setTime("");
   };
@@ -150,7 +199,27 @@ function QuickAppointment({ date, onAdd }: { date: ISODate; onAdd: (a: Partial<A
     <li className="dc-noprint flex items-center gap-2 pl-3 pr-1">
       <Plus size={14} style={{ color: "var(--dc-faint)" }} aria-hidden />
       <input type="time" className="dc-input w-[5.5rem] shrink-0 text-xs" aria-label="Appointment time" value={time} onChange={(e) => setTime(e.target.value)} />
-      <input className="dc-input text-[0.9rem]" placeholder="Add an appointment…" aria-label="Appointment title" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+      <input
+        className="dc-input text-[0.9rem]"
+        placeholder={toGoogle ? "Add to Google Calendar…" : "Add an appointment…"}
+        aria-label="Appointment title"
+        value={title}
+        disabled={busy}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && void add()}
+      />
+      {canGoogle && (
+        <button
+          type="button"
+          className="dc-chip shrink-0"
+          aria-pressed={toGoogle}
+          title={toGoogle ? "New appointments go to Google Calendar. Click to keep them in the planner only." : "New appointments stay in the planner. Click to send them to Google Calendar."}
+          onClick={() => setPlannerOnly(!plannerOnly)}
+          style={toGoogle ? { background: "#e3ecf7", color: "#2c5282" } : undefined}
+        >
+          {toGoogle ? "→ Google" : "Planner only"}
+        </button>
+      )}
       <MicButton onText={(t) => setTitle((c) => (c ? c + " " : "") + t)} label="Dictate an appointment" />
     </li>
   );

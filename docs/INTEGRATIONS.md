@@ -4,7 +4,7 @@ Status at a glance:
 
 | Integration | Status | What works |
 |---|---|---|
-| Google Calendar | Built; needs your Google OAuth client to be configured | See events from chosen calendars; create an event only when you ask; edit or delete a Google event only after a confirm |
+| Google Calendar | Built; needs your Google OAuth client to be configured | See events from chosen calendars; add new appointments to Google; check them off; edit or delete after a confirm |
 | Google Tasks | Built; needs the same Google client | Two-way sync of tasks you link: title, notes, due date (date only), done / not done; optional import of new items |
 | ClickUp | Built; needs your ClickUp API token and `0002_clickup.sql` | Brings in today's ClickUp tasks; two-way for linked tasks: title, due date (date only), done; "Add to ClickUp" from any task |
 | Sunsama | No direct connection (no public API) | Works through Google Calendar time blocks and the Google Tasks bridge |
@@ -39,7 +39,10 @@ None of these have been tested against live Google or ClickUp accounts from the 
 - **Cancelled events and invitations you declined** are hidden.
 - **Offline**: the last fetched events stay visible, marked as from Google.
 - **Creating**: from an appointment ("Move to Google Calendar") or Quick Add ("Also put it on my Google Calendar"), always after a confirm. Event ids are derived from the request, so a retried request can't create a second copy.
-- **Editing/deleting**: tap a Google event in Appointments. Changes are sent only after you confirm. Checking off an appointment never touches Google.
+- **Adding**: when Google Calendar is connected, the quick-add line in Appointments creates the event in your primary Google calendar (no time = an all-day event). The "→ Google / Planner only" chip switches this per device. If Google refuses or you're offline, the appointment is kept in the planner instead, never lost.
+- **Editing/deleting**: click a Google event to rename or re-time it, or use its trash button. Changes and deletes are sent only after you confirm; deleted events go to Google Calendar's Trash (restorable for 30 days). Deleting one occurrence of a recurring event removes only that day.
+- **Checking off**: Google events have a check-off box. The tick is saved on the event itself as a private extended property (`dailyCanvasDone`, the dates it was checked off), which Google Calendar doesn't display, so it shows on every device. Title, time and attendees are untouched. Events on calendars you can only view can't be checked off.
+- **Freshness**: events reload every 5 minutes and whenever you come back to the app, so things added or deleted in Google show up promptly.
 - **Expired or revoked access**: the planner refreshes tokens automatically. If Google refuses (revoked, password change, 7-day testing expiry), the tokens are deleted and Settings shows "Reconnect"; everything else keeps working.
 - **Disconnect**: revokes the grant at Google and deletes the stored tokens. Planner data stays.
 

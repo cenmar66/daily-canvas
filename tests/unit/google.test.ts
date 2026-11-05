@@ -96,3 +96,31 @@ describe("Google Tasks bridge decisions", () => {
     expect(fromRemote(r, { ...t, status: "done", completed_on: "2026-10-26" }, "2026-10-27")).toMatchObject({ status: "open", completed_on: null });
   });
 });
+
+describe("Checking off Google events", () => {
+  const cal = { id: "primary", summary: "Me", accessRole: "owner" };
+  it("reads the check-off from the event's private property, per day", async () => {
+    const { toExternalEvents } = await import("@/lib/canvas/gcal");
+    const ev = { id: "e", summary: "Inspection", start: { dateTime: "2026-11-05T17:00:00Z" }, end: { dateTime: "2026-11-05T18:00:00Z" }, extendedProperties: { private: { dailyCanvasDone: "2026-11-05" } } };
+    const [row] = toExternalEvents([ev], cal, "2026-11-05", "2026-11-05", "America/Los_Angeles");
+    expect(row.done).toBe(true);
+    expect(row.writable).toBe(true);
+    const multi = { id: "m", summary: "Conference", start: { date: "2026-11-05" }, end: { date: "2026-11-07" }, extendedProperties: { private: { dailyCanvasDone: "2026-11-06" } } };
+    const rows = toExternalEvents([multi], cal, "2026-11-05", "2026-11-06", "UTC");
+    expect(rows.map((r) => [r.date, r.done])).toEqual([["2026-11-05", false], ["2026-11-06", true]]);
+  });
+  it("marks view-only calendars as not writable", async () => {
+    const { toExternalEvents } = await import("@/lib/canvas/gcal");
+    const ev = { id: "h", summary: "Holiday", start: { date: "2026-11-11" }, end: { date: "2026-11-12" } };
+    const [row] = toExternalEvents([ev], { id: "hol", summary: "Holidays", accessRole: "reader" }, "2026-11-11", "2026-11-11", "UTC");
+    expect(row.writable).toBe(false);
+    expect(row.done).toBe(false);
+  });
+  it("adds and removes a day from the stored list", async () => {
+    const { withDoneDate } = await import("@/lib/canvas/gcal");
+    expect(withDoneDate([], "2026-11-05", true)).toBe("2026-11-05");
+    expect(withDoneDate(["2026-11-06"], "2026-11-05", true)).toBe("2026-11-05,2026-11-06");
+    expect(withDoneDate(["2026-11-05", "2026-11-06"], "2026-11-05", false)).toBe("2026-11-06");
+    expect(withDoneDate(["2026-11-05"], "2026-11-05", true)).toBe("2026-11-05");
+  });
+});

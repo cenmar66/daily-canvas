@@ -52,13 +52,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const g = await guard(20);
   if ("denied" in g) return g.denied;
-  const b = (await request.json().catch(() => ({}))) as { title?: string; date?: string; start?: string; end?: string | null; location?: string | null; notes?: string; timeZone?: string; clientKey?: string };
-  if (!b.title?.trim() || !isISODate(b.date) || !/^\d{2}:\d{2}$/.test(b.start ?? "") || !isValidTimeZone(b.timeZone ?? "")) return Response.json({ error: "Missing title, date or time." }, { status: 400 });
+  const b = (await request.json().catch(() => ({}))) as { title?: string; date?: string; start?: string | null; end?: string | null; location?: string | null; notes?: string; timeZone?: string; clientKey?: string };
+  // No start time means an all-day event on that date.
+  const allDay = !b.start;
+  if (!b.title?.trim() || !isISODate(b.date) || (!allDay && !/^\d{2}:\d{2}$/.test(b.start ?? "")) || !isValidTimeZone(b.timeZone ?? "")) return Response.json({ error: "Missing title, date or time." }, { status: 400 });
   const acc = await getAccount(g.supabase);
   if (!acc?.refresh_token_enc) return Response.json({ error: "Connect Google Calendar first." }, { status: 400 });
-  const end = b.end && /^\d{2}:\d{2}$/.test(b.end) && b.end > b.start! ? b.end : null;
-  const startUtc = zonedTimeToUtc(b.date, b.start!, b.timeZone!);
-  const endUtc = end ? zonedTimeToUtc(b.date, end, b.timeZone!) : new Date(startUtc.getTime() + 60 * 60_000);
+  const end = !allDay && b.end && /^\d{2}:\d{2}$/.test(b.end) && b.end > b.start! ? b.end : null;
+  const startUtc = allDay ? null : zonedTimeToUtc(b.date, b.start!, b.timeZone!);
+  const endUtc = startUtc ? (end ? zonedTimeToUtc(b.date, end, b.timeZone!) : new Date(startUtc.getTime() + 60 * 60_000)) : null;
   // A stable id from the request makes retries safe: Google answers 409 instead of duplicating.
   const id = createHash("sha256").update(`${g.userId}|${b.clientKey ?? `${b.title}|${b.date}|${b.start}`}`).digest("hex").slice(0, 40);
   try {
@@ -69,8 +71,8 @@ export async function POST(request: Request) {
         summary: b.title.trim().slice(0, 500),
         location: b.location ?? undefined,
         description: b.notes ? `${b.notes}\n\n(Added from The Daily Canvas)` : "Added from The Daily Canvas",
-        start: { dateTime: startUtc.toISOString(), timeZone: b.timeZone },
-        end: { dateTime: endUtc.toISOString(), timeZone: b.timeZone },
+        start: startUtc ? { dateTime: startUtc.toISOString(), timeZone: b.timeZone } : { date: b.date },
+        end: endUtc ? { dateTime: endUtc.toISOString(), timeZone: b.timeZone } : { date: addDays(b.date, 1) },
       }),
     });
     await audit(g.supabase, "google_calendar", "create_event", "ok", { id, duplicate: r.status === 409 });

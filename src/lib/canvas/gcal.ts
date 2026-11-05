@@ -21,6 +21,22 @@ export interface GCalendar {
   id: string;
   summary: string;
   backgroundColor?: string;
+  accessRole?: string;
+}
+
+/**
+ * Check-offs live on the Google event as a private extended property (invisible in
+ * Google Calendar, but on every device): the local dates it was checked off, comma
+ * separated, so each day of a multi-day event is checked separately.
+ */
+export const DONE_PROP = "dailyCanvasDone";
+export const doneDates = (e: Pick<GEvent, "extendedProperties">) =>
+  (e.extendedProperties?.private?.[DONE_PROP] ?? "").split(",").filter(Boolean);
+export function withDoneDate(current: string[], date: string, done: boolean): string {
+  const set = new Set(current);
+  if (done) set.add(date);
+  else set.delete(date);
+  return [...set].sort().join(",");
 }
 
 /** Heuristic, not a guarantee: blocks written by Sunsama (or similar planners). */
@@ -68,6 +84,8 @@ export function toExternalEvents(events: GEvent[], cal: GCalendar, from: ISODate
         htmlLink: e.htmlLink,
         isTimeBlock: looksLikeTimeBlock(e, cal),
         date: d,
+        done: doneDates(e).includes(d),
+        writable: cal.accessRole === undefined || cal.accessRole === "owner" || cal.accessRole === "writer",
       });
     }
   }
