@@ -95,9 +95,45 @@ export function TaskList({
   // there, or on Appointments to turn it into an appointment.
   const startDrag = (e: React.PointerEvent, idx: number, id: string) => {
     e.preventDefault();
+    beginDrag(e.currentTarget as HTMLElement, e.pointerId, e.clientX, e.clientY, idx, id);
+  };
+
+  // Mouse and Pencil can drag the whole row: a press that moves a few pixels becomes a
+  // drag, a press that doesn't stays a click (edit, tick, details). Touch keeps the
+  // handle so scrolling the page isn't hijacked.
+  const rowPointerDown = (e: React.PointerEvent, idx: number, id: string) => {
+    if (e.pointerType === "touch" || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("input, textarea, a, [role=checkbox], [role=button], button:not([data-drag-ok])")) return;
     const el = e.currentTarget as HTMLElement;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const pointerId = e.pointerId;
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId || Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      stop();
+      window.getSelection()?.removeAllRanges();
+      // The press ends as a drag, not a click on whatever is under it.
+      const swallow = (c: MouseEvent) => {
+        c.stopPropagation();
+        c.preventDefault();
+      };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      el.addEventListener("pointerup", () => setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 50), { once: true });
+      beginDrag(el, pointerId, ev.clientX, ev.clientY, idx, id);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+
+  const beginDrag = (el: HTMLElement, pointerId: number, x0: number, y0: number, idx: number, id: string) => {
     try {
-      el.setPointerCapture(e.pointerId);
+      el.setPointerCapture(pointerId);
     } catch {
       /* synthetic pointers can't be captured */
     }
@@ -109,8 +145,9 @@ export function TaskList({
     ghost.className = "dc-drag-ghost";
     ghost.textContent = task.title;
     (el.closest(".dc-root") ?? document.body).appendChild(ghost);
+    document.documentElement.classList.add("dc-dragging");
     const follow = (x: number, y: number) => (ghost.style.transform = `translate(${x + 14}px, ${y + 10}px)`);
-    follow(e.clientX, e.clientY);
+    follow(x0, y0);
 
     let over: number | null = null; // reorder target in this list
     let target: { card: HTMLElement; kind: "appointments" | TaskSection; index: number } | null = null;
@@ -158,6 +195,7 @@ export function TaskList({
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
       ghost.remove();
+      document.documentElement.classList.remove("dc-dragging");
       const dropped = target;
       highlight(null);
       setOverIdx(null);
@@ -194,6 +232,7 @@ export function TaskList({
           dragging={dragId === it.task.id}
           dropAbove={overIdx === idx && dragId !== null}
           onDragHandle={(e) => startDrag(e, idx, it.task.id)}
+          onRowPointerDown={(e) => rowPointerDown(e, idx, it.task.id)}
           onKeyMove={(dir) => move(idx, idx + dir)}
         />
       ))}
@@ -215,6 +254,7 @@ function TaskRow({
   dragging,
   dropAbove,
   onDragHandle,
+  onRowPointerDown,
   onKeyMove,
   depth = 0,
 }: {
@@ -225,6 +265,7 @@ function TaskRow({
   dragging?: boolean;
   dropAbove?: boolean;
   onDragHandle?: (e: React.PointerEvent) => void;
+  onRowPointerDown?: (e: React.PointerEvent) => void;
   onKeyMove?: (dir: -1 | 1) => void;
   depth?: number;
 }) {
@@ -257,7 +298,7 @@ function TaskRow({
         }
       }}
     >
-      <div className="flex min-h-[var(--dc-row)] items-center gap-2 pl-3 pr-1">
+      <div className="flex min-h-[var(--dc-row)] items-center gap-2 pl-3 pr-1" onPointerDown={onRowPointerDown}>
         <Checkbox checked={done} onToggle={() => complete(task)} label={`${done ? "Mark not done" : "Mark done"}: ${task.title}`} />
         <div className="min-w-0 flex-1 py-1">
           {editing ? (
@@ -277,7 +318,7 @@ function TaskRow({
               }}
             />
           ) : (
-            <button className="block w-full text-left text-[0.9rem] leading-snug" onClick={() => (setDraft(task.title), setEditing(true))} aria-label={`Edit ${task.title}`}>
+            <button data-drag-ok className="block w-full text-left text-[0.9rem] leading-snug" onClick={() => (setDraft(task.title), setEditing(true))} aria-label={`Edit ${task.title}`}>
               <span className="dc-strike">{task.title || <span style={{ color: "var(--dc-faint)" }}>Untitled</span>}</span>
               {task.quantity && <span className="ml-1.5 text-xs" style={{ color: "var(--dc-muted)" }}>× {task.quantity}</span>}
             </button>
@@ -296,7 +337,7 @@ function TaskRow({
             tabIndex={-1}
             aria-label="Drag to reorder or move to another section (or Alt+Arrow keys)"
             title="Drag to reorder, or onto another section"
-            className="dc-noprint hidden cursor-grab touch-none items-center px-0.5 opacity-0 group-hover:opacity-50 sm:flex [@media(hover:none)]:opacity-40"
+            className="dc-noprint hidden cursor-grab touch-none items-center px-0.5 opacity-25 group-hover:opacity-60 sm:flex [@media(hover:none)]:opacity-40"
             onPointerDown={onDragHandle}
           >
             <GripVertical size={14} />

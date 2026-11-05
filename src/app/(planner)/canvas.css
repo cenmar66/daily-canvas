@@ -315,6 +315,7 @@ body:has(.dc-root) .grain {
   background: var(--dc-paper); color: var(--dc-ink); border: 1px solid var(--dc-line);
   box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
 }
+.dc-dragging, .dc-dragging * { user-select: none; -webkit-user-select: none; cursor: grabbing !important; }
 .dc-card.dc-drop-target { outline: 2px dashed var(--dc-focus); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {

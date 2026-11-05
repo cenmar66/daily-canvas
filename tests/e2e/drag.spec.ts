@@ -73,3 +73,34 @@ test("task details: Make it an appointment (works without dragging)", async ({ p
   await expect(page.locator("#section-appointments").getByText("Dentist")).toBeVisible();
   await expect(page.locator("#section-personal").getByText("Dentist")).toHaveCount(0);
 });
+
+test.describe("dragging the task itself (no handle)", () => {
+  test.beforeEach(({}, info) => test.skip(info.project.name !== "desktop"));
+
+  test("drag a task by its title into another section; a plain click still edits", async ({ page }) => {
+    await openPlanner(page);
+    await addTask(page, "What matters most today?", "Pick up permit");
+    const title = page.getByRole("button", { name: "Edit Pick up permit" });
+    const from = (await title.boundingBox())!;
+    const to = (await page.locator("#section-personal").boundingBox())!;
+    await page.mouse.move(from.x + 20, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 40, from.y + 15, { steps: 3 });
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+    await page.mouse.up();
+    await expect(page.locator("#section-personal").getByText("Pick up permit")).toBeVisible();
+    await expect(page.locator("#section-must").getByText("Pick up permit")).toHaveCount(0);
+    await expect(page.getByLabel("Task title")).toHaveCount(0); // the drop didn't open editing
+    await page.getByRole("button", { name: "Edit Pick up permit" }).click();
+    await expect(page.getByLabel("Task title")).toBeVisible();
+  });
+
+  test("ticking the checkbox still works and doesn't start a drag", async ({ page }) => {
+    await openPlanner(page);
+    await addTask(page, "Add a work to-do…", "Tick me");
+    const box = page.getByRole("checkbox", { name: /Tick me/ });
+    await box.click();
+    await expect(box).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator(".dc-drag-ghost")).toHaveCount(0);
+  });
+});
