@@ -6,7 +6,9 @@ import { formatShort, formatTime } from "@/lib/canvas/dates";
 import { haptic, penScratch } from "@/lib/canvas/feedback";
 import { carryCount } from "@/lib/canvas/planning";
 import type { ISODate, Task, TaskSection } from "@/lib/canvas/types";
+import { TASK_SECTION_TITLES } from "@/lib/canvas/sections";
 import { MicButton } from "./dictation";
+import { ToAppointmentSheet } from "./to-appointment";
 import { useCanvas } from "./provider";
 
 export function Checkbox({ checked, onToggle, label }: { checked: boolean; onToggle: () => void; label: string }) {
@@ -72,7 +74,8 @@ export function TaskList({
   showMeta?: boolean;
   hideDone?: boolean;
 }) {
-  const { planner, rev, today } = useCanvas();
+  const { planner, rev, today, toast } = useCanvas();
+  const [toAppt, setToAppt] = useState<Task | null>(null);
   const items = useMemo(() => planner.tasksFor(date, section), [planner, date, section, rev]); // eslint-disable-line react-hooks/exhaustive-deps
   const placements = useMemo(() => planner.store.all("canvas_task_placements"), [planner, rev]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = hideDone ? items.filter((i) => i.task.status !== "done") : items;
@@ -88,33 +91,88 @@ export function TaskList({
   };
 
   // Pointer-based drag (works with mouse, touch and Pencil; HTML5 DnD doesn't on iOS).
+  // Drop within this list to reorder, on another task section (same day) to move it
+  // there, or on Appointments to turn it into an appointment.
   const startDrag = (e: React.PointerEvent, idx: number, id: string) => {
     e.preventDefault();
     const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic pointers can't be captured */
+    }
+    const task = items.find((i) => i.task.id === id)?.task;
+    if (!task) return;
     setDragId(id);
-    const rows = () => Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-task-row]") ?? []);
+
+    const ghost = document.createElement("div");
+    ghost.className = "dc-drag-ghost";
+    ghost.textContent = task.title;
+    (el.closest(".dc-root") ?? document.body).appendChild(ghost);
+    const follow = (x: number, y: number) => (ghost.style.transform = `translate(${x + 14}px, ${y + 10}px)`);
+    follow(e.clientX, e.clientY);
+
+    let over: number | null = null; // reorder target in this list
+    let target: { card: HTMLElement; kind: "appointments" | TaskSection; index: number } | null = null;
+    const highlight = (card: HTMLElement | null) => {
+      if (target?.card === card) return;
+      target?.card.classList.remove("dc-drop-target");
+      card?.classList.add("dc-drop-target");
+    };
+    const indexIn = (list: Element, y: number) => {
+      const rs = Array.from(list.querySelectorAll<HTMLElement>(":scope > [data-task-row]"));
+      const i = rs.findIndex((r) => {
+        const b = r.getBoundingClientRect();
+        return y < b.top + b.height / 2;
+      });
+      return i === -1 ? rs.length : i;
+    };
+
     const onMove = (ev: PointerEvent) => {
-      const rs = rows();
-      let target = rs.length;
-      for (let i = 0; i < rs.length; i++) {
-        const r = rs[i].getBoundingClientRect();
-        if (ev.clientY < r.top + r.height / 2) {
-          target = i;
-          break;
-        }
+      follow(ev.clientX, ev.clientY);
+      if (ev.clientY < 60) window.scrollBy(0, -14);
+      else if (ev.clientY > window.innerHeight - 60) window.scrollBy(0, 14);
+      const card = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>(".dc-card") ?? null;
+      const list = card?.querySelector<HTMLElement>("ul[data-drop-zone]") ?? null;
+      if (card && list && list === listRef.current) {
+        highlight(null);
+        target = null;
+        over = indexIn(list, ev.clientY);
+      } else if (card?.id === "section-appointments" && card.querySelector<HTMLElement>("[data-appt-date]")?.dataset.apptDate === date) {
+        highlight(card);
+        target = { card, kind: "appointments", index: 0 };
+        over = null;
+      } else if (card && list && list.dataset.date === date) {
+        highlight(card);
+        target = { card, kind: list.dataset.dropZone as TaskSection, index: indexIn(list, ev.clientY) };
+        over = null;
+      } else {
+        highlight(null);
+        target = null;
+        over = null;
       }
-      setOverIdx(target);
+      setOverIdx(over);
     };
     const onUp = () => {
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
-      setOverIdx((t) => {
-        if (t !== null && t !== idx && t !== idx + 1) move(idx, t > idx ? t - 1 : t);
-        return null;
-      });
+      ghost.remove();
+      const dropped = target;
+      highlight(null);
+      setOverIdx(null);
       setDragId(null);
+      if (dropped?.kind === "appointments") setToAppt(task);
+      else if (dropped) {
+        planner.moveTaskTo(task, date, dropped.kind, dropped.index);
+        toast(`Moved to ${TASK_SECTION_TITLES[dropped.kind]}`, {
+          label: "Undo",
+          run: () => {
+            const now = planner.store.get("canvas_tasks", task.id);
+            if (now) planner.moveTaskTo(now, date, section, idx);
+          },
+        });
+      } else if (over !== null && over !== idx && over !== idx + 1) move(idx, over > idx ? over - 1 : over);
     };
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
@@ -125,7 +183,7 @@ export function TaskList({
   const isPast = date < today;
 
   return (
-    <ul ref={listRef} className="dc-ruled" aria-label={`${section} tasks`}>
+    <ul ref={listRef} className="dc-ruled" aria-label={`${section} tasks`} data-drop-zone={section} data-date={date}>
       {shown.map((it, idx) => (
         <TaskRow
           key={it.task.id}
@@ -144,6 +202,7 @@ export function TaskList({
       {Array.from({ length: empty }).map((_, i) => (
         <li key={`slot-${i}`} aria-hidden />
       ))}
+      {toAppt && <ToAppointmentSheet task={toAppt} date={date} onClose={() => setToAppt(null)} />}
     </ul>
   );
 }
@@ -235,8 +294,9 @@ function TaskRow({
           <span
             role="button"
             tabIndex={-1}
-            aria-label="Drag to reorder (or Alt+Arrow keys)"
-            className="dc-noprint hidden cursor-grab touch-none items-center px-0.5 opacity-0 group-hover:opacity-50 sm:flex"
+            aria-label="Drag to reorder or move to another section (or Alt+Arrow keys)"
+            title="Drag to reorder, or onto another section"
+            className="dc-noprint hidden cursor-grab touch-none items-center px-0.5 opacity-0 group-hover:opacity-50 sm:flex [@media(hover:none)]:opacity-40"
             onPointerDown={onDragHandle}
           >
             <GripVertical size={14} />

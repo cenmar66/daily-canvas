@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, CalendarArrowUp, ExternalLink, Inbox, Link2, Trash2 } from "lucide-react";
+import { Archive, CalendarArrowUp, CalendarClock, ExternalLink, Inbox, Link2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { addDays, formatShort } from "@/lib/canvas/dates";
 import { describeRule } from "@/lib/canvas/planning";
@@ -12,6 +12,7 @@ import { clickUpUrl } from "@/lib/canvas/clickup-sync";
 import type { TaskLink } from "@/lib/canvas/types";
 import { useClickUpStatus } from "./clickup-client";
 import { useCanvas } from "./provider";
+import { ToAppointmentSheet } from "./to-appointment";
 import { Field, Sheet } from "./sheet";
 import { Checkbox, useCompleteTask } from "./tasks";
 
@@ -24,6 +25,7 @@ export function TaskSheet({ task: initial, date, onClose }: { task: Task; date: 
   const events = useMemo(() => store.all("canvas_task_events").filter((e) => e.task_id === task.id).sort((a, b) => a.at.localeCompare(b.at)), [store, task.id, rev]); // eslint-disable-line react-hooks/exhaustive-deps
   const recurrence = task.recurrence_id ? store.get("canvas_recurrences", task.recurrence_id) : undefined;
   const clickUp = useClickUpStatus();
+  const [toAppt, setToAppt] = useState(false);
   const complete = useCompleteTask();
   const [notes, setNotes] = useState(task.notes);
   const [title, setTitle] = useState(task.title);
@@ -221,6 +223,11 @@ export function TaskSheet({ task: initial, date, onClose }: { task: Task; date: 
               ★ Make it a Must Do
             </button>
           )}
+          {!task.parent_id && (
+            <button className="dc-btn" onClick={() => setToAppt(true)}>
+              <CalendarClock size={15} /> Make it an appointment
+            </button>
+          )}
         </div>
 
         {mode === "cloud" && (
@@ -246,6 +253,7 @@ export function TaskSheet({ task: initial, date, onClose }: { task: Task; date: 
           </ul>
         </details>
       </div>
+      {toAppt && <ToAppointmentSheet task={task} date={date} onClose={() => setToAppt(false)} onDone={onClose} />}
     </Sheet>
   );
 }

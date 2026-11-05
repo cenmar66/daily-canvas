@@ -307,6 +307,15 @@ body:has(.dc-root) .grain {
 }
 
 .dc-drag-over { box-shadow: inset 0 2px 0 var(--dc-focus); }
+/* Drag and drop between sections: a label under the pointer, and the section it would land in. */
+.dc-drag-ghost {
+  position: fixed; top: 0; left: 0; z-index: 90; pointer-events: none;
+  max-width: 16rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  padding: 0.4rem 0.7rem; border-radius: 0.6rem; font-size: 0.85rem;
+  background: var(--dc-paper); color: var(--dc-ink); border: 1px solid var(--dc-line);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
+}
+.dc-card.dc-drop-target { outline: 2px dashed var(--dc-focus); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .dc-root *, .dc-root *::before, .dc-root *::after {

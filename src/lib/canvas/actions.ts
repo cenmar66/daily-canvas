@@ -211,6 +211,30 @@ export class Planner {
     this.log(task.id, "moved", { from: task.section, to });
   }
 
+  /** Drag and drop into another section, landing at `index` in that section's list. */
+  moveTaskTo(task: Task, date: ISODate, to: TaskSection, index: number) {
+    const ids = this.tasksFor(date, to).map((i) => i.task.id).filter((id) => id !== task.id);
+    this.moveTask(task, date, to);
+    ids.splice(Math.max(0, Math.min(ids.length, index)), 0, task.id);
+    this.reorder(date, to, ids);
+  }
+
+  /**
+   * Turn a task into an appointment on `date`. The task is archived (not deleted) and its
+   * history notes where it went, so `undoToAppointment` can bring it back exactly.
+   */
+  toAppointment(task: Task, date: ISODate, times: { start_time: string | null; end_time: string | null; location?: string | null }) {
+    const appt = this.addAppointment({ date, title: task.title, notes: task.notes ?? "", location: times.location ?? null, start_time: times.start_time, end_time: times.end_time });
+    this.store.update("canvas_tasks", task.id, { status: "archived" });
+    this.log(task.id, "moved", { from: task.section, to: "appointments", appointment_id: appt.id });
+    return appt;
+  }
+  undoToAppointment(task: Task, appointmentId: string) {
+    this.store.remove("canvas_appointments", appointmentId);
+    this.store.update("canvas_tasks", task.id, { status: task.status === "archived" ? "open" : task.status });
+    this.log(task.id, "restored", { from: "appointments" });
+  }
+
   reorder(date: ISODate, section: TaskSection, orderedTaskIds: string[]) {
     orderedTaskIds.forEach((tid, i) => {
       const pid = placementId(tid, date);

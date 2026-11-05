@@ -80,7 +80,7 @@ export function AppointmentsCard({ date }: { date: ISODate }) {
 
   return (
     <SectionCard sectionKey="appointments" count={rows.length ? `${rows.length} event${rows.length > 1 ? "s" : ""}` : undefined}>
-      <ul className="dc-ruled">
+      <ul className="dc-ruled" data-appt-date={date}>
         {rows.map((r, i) =>
           r.kind === "local" ? (
             <li key={r.a.id} className="flex items-center gap-2 pl-3 pr-1">
